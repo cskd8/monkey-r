@@ -1,0 +1,11 @@
+[package]
+name = "monkey-r"
+version = "0.1.0"
+authors = ["杉山祐紀 <magichiro-4869@i.softbank.jp>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rustyline = "1.0.0"
+whoami = "1.0.0"
