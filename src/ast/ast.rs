@@ -37,6 +37,7 @@ pub enum Infix {
 
 pub enum Expression {
     Identifier(Identifier),
+    Literal(Literal),
     Prefix(Prefix, Box<Expression>),
     Infix(Infix, Box<Expression>, Box<Expression>),
     If {
@@ -67,6 +68,7 @@ pub enum Literal {
         Parameters: Vec<Identifier>,
         Body: BlockStatement,
     },
+    Boolean(bool),
     String(String),
     Array(Vec<Expression>),
     Hash(Vec<(Expression, Expression)>),
