@@ -14,6 +14,7 @@ pub enum Exp {
     INDEX = 7,
 }
 
+#[derive(Debug)]
 pub struct Parser<'a> {
     l: lexer::Lexer<'a>,
     errors: Vec<String>,
@@ -23,12 +24,15 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn New(l: lexer::Lexer) -> parser::Parser {
-        Parser {
+        let mut p = Parser {
             l: l,
-            errors: Vec::new(),
+            errors: vec![],
             curToken: token::Token::EOF,
             peekToken: token::Token::EOF,
-        }
+        };
+        p.nextToken();
+        p.nextToken();
+        return p;
     }
 
     pub fn Errors(&self) -> Vec<String> {
@@ -41,9 +45,7 @@ impl<'a> Parser<'a> {
     }
 
     pub fn ParseProgram(&mut self) -> ast::Program {
-        let mut program = ast::Program {
-            Statements: Vec::new(),
-        };
+        let mut program = ast::Program { Statements: vec![] };
 
         while !self.curTokenIs(token::Token::EOF) {
             let mut stmt = self.parseStatement();
@@ -55,7 +57,7 @@ impl<'a> Parser<'a> {
         return program;
     }
 
-    pub fn parseStatement(&self) -> Option<ast::Statement> {
+    pub fn parseStatement(&mut self) -> Option<ast::Statement> {
         match self.curToken {
             token::Token::LET => self.parseLetStatement(),
             token::Token::RETURN => self.parseReturnStatement(),
@@ -63,21 +65,30 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn parseLetStatement(&self) -> Option<ast::Statement> {
+    pub fn parseLetStatement(&mut self) -> Option<ast::Statement> {
         match self.peekToken {
-            token::Token::IDENT(_) => {}
+            token::Token::IDENT(_) => {
+                self.nextToken();
+            }
             _ => return None,
         }
-        let mut n;
-        match self.curToken {
-            token::Token::IDENT(name) => n = ast::Identifier { Value: name },
+        let n = match self.curToken {
+            token::Token::IDENT(ref mut name) => ast::Identifier {
+                Value: name.clone(),
+            },
             _ => return None,
+        };
+        if !self.expectPeek(token::Token::ASSIGN) {
+            return None;
         }
-        let mut v = match self.parseExpression(Exp::LOWEST as i32) {
+
+        self.nextToken();
+        let v = match self.parseExpression(Exp::LOWEST as i32) {
             Some(expr) => expr,
             None => return None,
         };
-        if self.peekTokenIs(token::Token::SEMICOLON) {
+
+        if self.peekTokenIs(&token::Token::SEMICOLON) {
             self.nextToken();
         }
 
@@ -89,12 +100,12 @@ impl<'a> Parser<'a> {
         self.curToken == t
     }
 
-    pub fn peekTokenIs(&self, t: token::Token) -> bool {
-        self.peekToken == t
+    pub fn peekTokenIs(&self, t: &token::Token) -> bool {
+        self.peekToken == *t
     }
 
     pub fn expectPeek(&mut self, t: token::Token) -> bool {
-        if self.peekTokenIs(t) {
+        if self.peekTokenIs(&t) {
             self.nextToken();
             return true;
         } else {
@@ -115,14 +126,18 @@ impl<'a> Parser<'a> {
     pub fn parseReturnStatement(&mut self) -> Option<ast::Statement> {
         let mut n;
         match self.curToken {
-            token::Token::IDENT(name) => n = ast::Identifier { Value: name },
+            token::Token::IDENT(ref mut name) => {
+                n = ast::Identifier {
+                    Value: name.clone(),
+                }
+            }
             _ => return None,
         }
         let mut v = match self.parseExpression(Exp::LOWEST as i32) {
             Some(expr) => expr,
             None => return None,
         };
-        if self.peekTokenIs(token::Token::SEMICOLON) {
+        if self.peekTokenIs(&token::Token::SEMICOLON) {
             self.nextToken();
         }
 
@@ -130,12 +145,12 @@ impl<'a> Parser<'a> {
         return Some(stmt);
     }
 
-    pub fn parseExpressionStatement(&self) -> Option<ast::Statement> {
+    pub fn parseExpressionStatement(&mut self) -> Option<ast::Statement> {
         let mut v = match self.parseExpression(Exp::LOWEST as i32) {
             Some(expr) => expr,
             None => return None,
         };
-        if self.peekTokenIs(token::Token::SEMICOLON) {
+        if self.peekTokenIs(&token::Token::SEMICOLON) {
             self.nextToken();
         }
 
@@ -143,8 +158,8 @@ impl<'a> Parser<'a> {
         return Some(stmt);
     }
 
-    pub fn noPrefixParseFnError(&mut self, t: token::Token) {
-        let msg = format!("no prefix parse function for {:?} found", t);
+    pub fn noPrefixParseFnError(&mut self) {
+        let msg = format!("no prefix parse function for {:?} found", self.curToken);
         println!("{}", msg);
         self.errors.push(msg);
     }
@@ -165,14 +180,12 @@ impl<'a> Parser<'a> {
             token::Token::LBRACE => self.parseHashLiteral(),
             token::Token::MACRO => self.parseMacroLiteral(),
             _ => {
-                self.noPrefixParseFnError(self.curToken);
+                self.noPrefixParseFnError();
                 return None;
             }
         };
 
-        while !self.peekTokenIs(token::Token::SEMICOLON)
-            && precedence < (self.peekPrecedence() as i32)
-        {
+        while !self.peekTokenIs(&token::Token::SEMICOLON) && precedence < self.peekPrecedence() {
             leftExp = match self.peekToken {
                 token::Token::PLUS
                 | token::Token::MINUS
@@ -181,26 +194,45 @@ impl<'a> Parser<'a> {
                 | token::Token::EQ
                 | token::Token::NOT_EQ
                 | token::Token::LT
-                | token::Token::GT => self.parseInfixExpression(),
-                token::Token::LPAREN => self.parseCallExpression(),
-                token::Token::LBRACKET => self.parseIndexExpression(),
+                | token::Token::GT => {
+                    self.nextToken();
+                    self.parseInfixExpression(match leftExp {
+                        Some(value) => value,
+                        _ => return None,
+                    })
+                }
+                token::Token::LPAREN => {
+                    self.nextToken();
+                    self.parseCallExpression(match leftExp {
+                        Some(value) => value,
+                        _ => return None,
+                    })
+                }
+                token::Token::LBRACKET => {
+                    self.nextToken();
+                    self.parseIndexExpression(match leftExp {
+                        Some(value) => value,
+                        _ => return None,
+                    })
+                }
                 _ => return leftExp,
             };
-            self.nextToken();
         }
         return leftExp;
     }
 
-    pub fn parseIdentifier(&self) -> Option<ast::Expression> {
+    pub fn parseIdentifier(&mut self) -> Option<ast::Expression> {
         match self.curToken {
-            token::Token::IDENT(ident) => Some(ast::Expression::Identifier(ast::Identifier {
-                Value: ident,
-            })),
+            token::Token::IDENT(ref mut ident) => {
+                Some(ast::Expression::Identifier(ast::Identifier {
+                    Value: ident.clone(),
+                }))
+            }
             _ => None,
         }
     }
 
-    pub fn parseIntegerLiteral(&self) -> Option<ast::Expression> {
+    pub fn parseIntegerLiteral(&mut self) -> Option<ast::Expression> {
         let v = match self.curToken {
             token::Token::INT(lit) => lit as i64,
             _ => {
@@ -216,7 +248,7 @@ impl<'a> Parser<'a> {
         return lit;
     }
 
-    pub fn parsePrefixExpression(&self) -> Option<ast::Expression> {
+    pub fn parsePrefixExpression(&mut self) -> Option<ast::Expression> {
         let prefix = match self.curToken {
             token::Token::IDENT(_) => ast::Prefix::IDENT,
             token::Token::INT(_) => ast::Prefix::INT,
@@ -278,7 +310,7 @@ impl<'a> Parser<'a> {
         return p as i32;
     }
 
-    pub fn parseInfixExpression(&self, left: ast::Expression) -> Option<ast::Expression> {
+    pub fn parseInfixExpression(&mut self, left: ast::Expression) -> Option<ast::Expression> {
         let infix = match self.curToken {
             token::Token::PLUS => ast::Infix::PLUS,
             token::Token::MINUS => ast::Infix::MINUS,
@@ -295,26 +327,22 @@ impl<'a> Parser<'a> {
 
         let precedence = self.curPrecedence();
         self.nextToken();
-        match self.parseExpression(precedence) {
+        return match self.parseExpression(precedence) {
             Some(expr) => Some(ast::Expression::Infix(
                 infix,
                 Box::new(left),
                 Box::new(expr),
             )),
             None => None,
-        }
+        };
     }
 
     pub fn parseBoolean(&self) -> Option<ast::Expression> {
-        match self.curToken {
-            token::Token::BOOL(value) => {
-                Some(ast::Expression::Literal(ast::Literal::Boolean(value)))
-            }
-            _ => None,
-        }
+        let value = self.curTokenIs(token::Token::TRUE);
+        return Some(ast::Expression::Literal(ast::Literal::Boolean(value)));
     }
 
-    pub fn parseGroupedExpression(&self) -> Option<ast::Expression> {
+    pub fn parseGroupedExpression(&mut self) -> Option<ast::Expression> {
         self.nextToken();
 
         let exp = self.parseExpression(Exp::LOWEST as i32);
@@ -325,7 +353,7 @@ impl<'a> Parser<'a> {
         return exp;
     }
 
-    pub fn parseIfExpression(&self) -> Option<ast::Expression> {
+    pub fn parseIfExpression(&mut self) -> Option<ast::Expression> {
         if !self.expectPeek(token::Token::LPAREN) {
             return None;
         }
@@ -348,8 +376,8 @@ impl<'a> Parser<'a> {
             _ => return None,
         };
 
-        let mut alternative;
-        if self.peekTokenIs(token::Token::ELSE) {
+        let mut alternative: ast::BlockStatement = ast::BlockStatement { Statements: vec![] };
+        if self.peekTokenIs(&token::Token::ELSE) {
             self.nextToken();
 
             if !self.expectPeek(token::Token::LBRACE) {
@@ -369,8 +397,8 @@ impl<'a> Parser<'a> {
         });
     }
 
-    pub fn parseBlockStatement(&self) -> Option<ast::BlockStatement> {
-        let mut statements = Vec::new();
+    pub fn parseBlockStatement(&mut self) -> Option<ast::BlockStatement> {
+        let mut statements: Vec<ast::Statement> = Vec::new();
         self.nextToken();
         while !self.curTokenIs(token::Token::RBRACE) && !self.curTokenIs(token::Token::EOF) {
             let stmt = self.parseStatement();
@@ -384,7 +412,7 @@ impl<'a> Parser<'a> {
         });
     }
 
-    pub fn parseFunctionLiteral(&self) -> Option<ast::Expression> {
+    pub fn parseFunctionLiteral(&mut self) -> Option<ast::Expression> {
         if !self.expectPeek(token::Token::LPAREN) {
             return None;
         }
@@ -411,9 +439,9 @@ impl<'a> Parser<'a> {
         return Some(lit);
     }
 
-    pub fn parseFunctionParameters(&self) -> Option<Vec<ast::Identifier>> {
-        let identifiers = Vec::new();
-        if self.peekTokenIs(token::Token::RPAREN) {
+    pub fn parseFunctionParameters(&mut self) -> Option<Vec<ast::Identifier>> {
+        let mut identifiers: Vec<ast::Identifier> = Vec::new();
+        if self.peekTokenIs(&token::Token::RPAREN) {
             self.nextToken();
             return Some(identifiers);
         }
@@ -421,16 +449,20 @@ impl<'a> Parser<'a> {
         self.nextToken();
 
         let ident = match self.curToken {
-            token::Token::IDENT(name) => ast::Identifier { Value: name },
+            token::Token::IDENT(ref mut name) => ast::Identifier {
+                Value: name.clone(),
+            },
             _ => return None,
         };
         identifiers.push(ident);
 
-        while !self.peekTokenIs(token::Token::COMMA) {
+        while !self.peekTokenIs(&token::Token::COMMA) {
             self.nextToken();
             self.nextToken();
             let ident = match self.curToken {
-                token::Token::IDENT(name) => ast::Identifier { Value: name },
+                token::Token::IDENT(ref mut name) => ast::Identifier {
+                    Value: name.clone(),
+                },
                 _ => return None,
             };
             identifiers.push(ident);
@@ -443,7 +475,7 @@ impl<'a> Parser<'a> {
         return Some(identifiers);
     }
 
-    pub fn parseCallExpression(&self, function: ast::Expression) -> Option<ast::Expression> {
+    pub fn parseCallExpression(&mut self, function: ast::Expression) -> Option<ast::Expression> {
         let exp = ast::Expression::Call {
             Function: Box::new(function),
             Arguments: match self.parseExpressionList(token::Token::RPAREN) {
@@ -452,5 +484,116 @@ impl<'a> Parser<'a> {
             },
         };
         return Some(exp);
+    }
+    pub fn parseExpressionList(&mut self, end: token::Token) -> Option<Vec<ast::Expression>> {
+        let mut list: Vec<ast::Expression> = Vec::new();
+        if self.peekTokenIs(&end) {
+            self.nextToken();
+            return Some(list);
+        }
+
+        self.nextToken();
+        list.push(match self.parseExpression(Exp::LOWEST as i32) {
+            Some(value) => value,
+            _ => return None,
+        });
+
+        if self.expectPeek(end) {
+            return None;
+        }
+        return Some(list);
+    }
+
+    pub fn parseStringLiteral(&mut self) -> Option<ast::Expression> {
+        match self.curToken {
+            token::Token::STRING(ref mut value) => Some(ast::Expression::Literal(
+                ast::Literal::String(value.clone()),
+            )),
+            _ => None,
+        }
+    }
+
+    pub fn parseArrayLiteral(&mut self) -> Option<ast::Expression> {
+        let elements = match self.parseExpressionList(token::Token::RBRACKET) {
+            Some(value) => value,
+            _ => return None,
+        };
+        return Some(ast::Expression::Literal(ast::Literal::Array(elements)));
+    }
+
+    pub fn parseIndexExpression(&mut self, left: ast::Expression) -> Option<ast::Expression> {
+        self.nextToken();
+        let index = match self.parseExpression(Exp::LOWEST as i32) {
+            Some(value) => value,
+            _ => return None,
+        };
+
+        if !self.expectPeek(token::Token::RBRACKET) {
+            return None;
+        }
+
+        return Some(ast::Expression::Index {
+            Left: Box::new(left),
+            Index: Box::new(index),
+        });
+    }
+
+    pub fn parseHashLiteral(&mut self) -> Option<ast::Expression> {
+        let mut pairs: Vec<(ast::Expression, ast::Expression)> = Vec::new();
+
+        while !self.peekTokenIs(&token::Token::RBRACE) {
+            self.nextToken();
+            let key = match self.parseExpression(Exp::LOWEST as i32) {
+                Some(value) => value,
+                _ => return None,
+            };
+
+            if !self.expectPeek(token::Token::COLON) {
+                return None;
+            }
+
+            self.nextToken();
+            let value = match self.parseExpression(Exp::LOWEST as i32) {
+                Some(value) => value,
+                _ => return None,
+            };
+
+            pairs.push((key, value));
+
+            if !self.peekTokenIs(&token::Token::RBRACE) && !self.expectPeek(token::Token::COMMA) {
+                return None;
+            }
+        }
+
+        if !self.expectPeek(token::Token::RBRACE) {
+            return None;
+        }
+
+        return Some(ast::Expression::Literal(ast::Literal::Hash(pairs)));
+    }
+
+    pub fn parseMacroLiteral(&mut self) -> Option<ast::Expression> {
+        if !self.expectPeek(token::Token::LPAREN) {
+            return None;
+        }
+
+        let parameters = match self.parseFunctionParameters() {
+            Some(value) => value,
+            _ => return None,
+        };
+
+        if !self.expectPeek(token::Token::LBRACE) {
+            return None;
+        }
+
+        let body = match self.parseBlockStatement() {
+            Some(value) => value,
+            _ => return None,
+        };
+
+        return Some(ast::Expression::Literal(ast::Literal::Macro {
+            Parameters: parameters,
+            Body: body,
+        }));
     }
 }

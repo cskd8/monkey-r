@@ -2,10 +2,12 @@ use crate::lexer::lexer::*;
 use crate::parser::parser::*;
 use crate::token::token::*;
 
+#[derive(Debug)]
 pub struct Identifier {
-    Value: String,
+    pub Value: String,
 }
 
+#[derive(Debug)]
 pub enum Prefix {
     IDENT,
     INT,
@@ -22,6 +24,7 @@ pub enum Prefix {
     MACRO,
 }
 
+#[derive(Debug)]
 pub enum Infix {
     PLUS,
     MINUS,
@@ -35,6 +38,7 @@ pub enum Infix {
     LBRACKET,
 }
 
+#[derive(Debug)]
 pub enum Expression {
     Identifier(Identifier),
     Literal(Literal),
@@ -55,6 +59,7 @@ pub enum Expression {
     },
 }
 
+#[derive(Debug)]
 pub enum Statement {
     Let(Identifier, Expression),
     Return(Identifier, Expression),
@@ -62,6 +67,7 @@ pub enum Statement {
     Block(Vec<Statement>),
 }
 
+#[derive(Debug)]
 pub enum Literal {
     Int(i64),
     Function {
@@ -78,10 +84,12 @@ pub enum Literal {
     },
 }
 
+#[derive(Debug)]
 pub struct BlockStatement {
-    Statements: Vec<Statement>,
+    pub Statements: Vec<Statement>,
 }
 
+#[derive(Debug)]
 pub struct Program {
     pub Statements: Vec<Statement>,
 }
