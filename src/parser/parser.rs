@@ -124,24 +124,17 @@ impl<'a> Parser<'a> {
     }
 
     pub fn parseReturnStatement(&mut self) -> Option<ast::Statement> {
-        let mut n;
-        match self.curToken {
-            token::Token::IDENT(ref mut name) => {
-                n = ast::Identifier {
-                    Value: name.clone(),
-                }
-            }
-            _ => return None,
-        }
-        let mut v = match self.parseExpression(Exp::LOWEST as i32) {
+        self.nextToken();
+        let v = match self.parseExpression(Exp::LOWEST as i32) {
             Some(expr) => expr,
             None => return None,
         };
+
         if self.peekTokenIs(&token::Token::SEMICOLON) {
             self.nextToken();
         }
 
-        let stmt = ast::Statement::Let(n, v);
+        let stmt = ast::Statement::Return(v);
         return Some(stmt);
     }
 
@@ -456,7 +449,7 @@ impl<'a> Parser<'a> {
         };
         identifiers.push(ident);
 
-        while !self.peekTokenIs(&token::Token::COMMA) {
+        while self.peekTokenIs(&token::Token::COMMA) {
             self.nextToken();
             self.nextToken();
             let ident = match self.curToken {
@@ -498,7 +491,16 @@ impl<'a> Parser<'a> {
             _ => return None,
         });
 
-        if self.expectPeek(end) {
+        while self.peekTokenIs(&token::Token::COMMA) {
+            self.nextToken();
+            self.nextToken();
+            list.push(match self.parseExpression(Exp::LOWEST as i32) {
+                Some(value) => value,
+                _ => return None,
+            });
+        }
+
+        if !self.expectPeek(end) {
             return None;
         }
         return Some(list);

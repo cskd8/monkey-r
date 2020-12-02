@@ -62,7 +62,7 @@ pub enum Expression {
 #[derive(Debug)]
 pub enum Statement {
     Let(Identifier, Expression),
-    Return(Identifier, Expression),
+    Return(Expression),
     Expression(Expression),
     Block(Vec<Statement>),
 }
