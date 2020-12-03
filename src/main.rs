@@ -2,6 +2,8 @@ mod lexer;
 mod repl;
 use repl::repl::*;
 mod ast;
+mod evaluator;
+mod object;
 mod parser;
 mod token;
 
