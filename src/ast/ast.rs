@@ -84,12 +84,5 @@ pub enum Literal {
     },
 }
 
-#[derive(PartialEq, Clone, Debug)]
-pub struct BlockStatement {
-    pub Statements: Vec<Statement>,
-}
-
-#[derive(PartialEq, Clone, Debug)]
-pub struct Program {
-    pub Statements: Vec<Statement>,
-}
+pub type BlockStatement = Vec<Statement>;
+pub type Program = BlockStatement;

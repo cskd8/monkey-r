@@ -45,12 +45,12 @@ impl<'a> Parser<'a> {
     }
 
     pub fn ParseProgram(&mut self) -> ast::Program {
-        let mut program = ast::Program { Statements: vec![] };
+        let mut program: ast::Program = vec![];
 
         while !self.curTokenIs(token::Token::EOF) {
             let mut stmt = self.parseStatement();
             if let Some(s) = stmt {
-                program.Statements.push(s);
+                program.push(s);
             }
             self.nextToken();
         }
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
             _ => return None,
         };
 
-        let mut alternative: ast::BlockStatement = ast::BlockStatement { Statements: vec![] };
+        let mut alternative: ast::BlockStatement = vec![];
         if self.peekTokenIs(&token::Token::ELSE) {
             self.nextToken();
 
@@ -400,9 +400,7 @@ impl<'a> Parser<'a> {
             }
             self.nextToken();
         }
-        return Some(ast::BlockStatement {
-            Statements: statements,
-        });
+        return Some(statements);
     }
 
     pub fn parseFunctionLiteral(&mut self) -> Option<ast::Expression> {
